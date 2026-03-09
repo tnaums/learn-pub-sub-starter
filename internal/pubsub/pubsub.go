@@ -1,5 +1,14 @@
 package pubsub
 
+import (
+	"context"
+	"encoding/json"
+	"log"
+	"time"
+	
+	amqp "github.com/rabbitmq/amqp091-go"	
+)
+
 func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	dat, err := json.Marshal(val)
 	if err != nil {
@@ -10,14 +19,14 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	// Prepare this message to be persistent.  Your publishing requirements may
 	// be different.
 	msg := amqp.Publishing{
-		ContentType:  "application/json",
-		Body:         dat,
+		ContentType: "application/json",
+		Body:        dat,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	err = c.PublishWithContext(ctx, "logs", "info", false, false, msg)
+	err = ch.PublishWithContext(ctx, exchange, key, false, false, msg)
 	if err != nil {
 		// Since publish is asynchronous this can happen if the network connection
 		// is reset or if the server has run out of resources.

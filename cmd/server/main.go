@@ -6,11 +6,15 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
+	
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 func main() {
-	const rabbitConnString = "amqp://guest:guest@localhost:5672/"
+	//	const rabbitConnString = "amqp://guest:guest@localhost:5672/"
+	const rabbitConnString = "amqp://guest:guest@127.0.0.1:5672/"	
 
 	conn, err := amqp.Dial(rabbitConnString)
 	if err != nil {
@@ -21,9 +25,10 @@ func main() {
 
 	ch, err := conn.Channel()
 	if err != nil {
-		return nil, nil, err
+		log.Fatalf("could not open channel: %v", err)
 	}
-	
+
+	err = pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{true})
 	// wait for ctrl+c
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
