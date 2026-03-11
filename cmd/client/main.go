@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"	
 
 	amqp "github.com/rabbitmq/amqp091-go"	
 )
@@ -19,5 +20,7 @@ func main() {
 	
 	fmt.Println("Starting Peril client...")
 
-	userName, err := pubsub.ClientWelcome()	
+	userName, err := pubsub.ClientWelcome()
+	queueName := routing.PauseKey + "." + userName
+	pubsub.DeclareAndBind(conn, routing.ExchangePerilDirect, queueName, routing.PauseKey, transient)
 }
