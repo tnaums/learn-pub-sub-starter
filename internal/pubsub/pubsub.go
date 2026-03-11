@@ -51,7 +51,7 @@ func DeclareAndBind(
 	
 	ch, err := conn.Channel()
 	if err != nil {
-		return amqp.Channel{}, amqp.Queue{}, err
+		return &amqp.Channel{}, amqp.Queue{}, err
 	}
 
 	if queueType == 0 {
@@ -63,22 +63,23 @@ func DeclareAndBind(
 		exclusive = true
 	}
 
+	var args amqp.Table
 	q, err := ch.QueueDeclare(queueName, durable, autodelete, exclusive, nowait, args)
 	if err != nil {
-		return amqp.Channel{}, amqp.Queue{}, err
+		return &amqp.Channel{}, amqp.Queue{}, err
 	}
 
 	err = ch.QueueBind(queueName, key, exchange, nowait, args)
 	if err != nil {
-		return amqp.Channel{}, amqp.Queue{}, err
+		return &amqp.Channel{}, amqp.Queue{}, err
 	}
 
 	return ch, q, nil
 }
 
-type SimpleQueType int
+type SimpleQueueType int
 
 const (
-	durable SimpleQueType = iota
+	durable SimpleQueueType = iota
 	transient
 )
