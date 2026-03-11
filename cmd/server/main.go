@@ -13,8 +13,8 @@ import (
 )
 
 func main() {
-	//	const rabbitConnString = "amqp://guest:guest@localhost:5672/"
-	const rabbitConnString = "amqp://guest:guest@127.0.0.1:5672/"	
+	const rabbitConnString = "amqp://guest:guest@localhost:5672/"
+	//const rabbitConnString = "amqp://guest:guest@127.0.0.1:5672/"	
 
 	conn, err := amqp.Dial(rabbitConnString)
 	if err != nil {
