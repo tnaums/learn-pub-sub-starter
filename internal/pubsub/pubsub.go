@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"log"
 	"time"
-	
-	amqp "github.com/rabbitmq/amqp091-go"	
+
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
@@ -44,5 +44,41 @@ func DeclareAndBind(
 	key string,
 	queueType SimpleQueueType, // SimpleQueueType is an "enum" type I made to represent "durable" or "transient"
 ) (*amqp.Channel, amqp.Queue, error) {
+	durable := false
+	autodelete := false
+	exclusive := false
+	nowait := false
+	
+	ch, err := conn.Channel()
+	if err != nil {
+		return amqp.Channel{}, amqp.Queue{}, err
+	}
 
+	if queueType == 0 {
+		durable = true
+	}
+
+	if queueType == 1 {
+		autodelete = true
+		exclusive = true
+	}
+
+	q, err := ch.QueueDeclare(queueName, durable, autodelete, exclusive, nowait, args)
+	if err != nil {
+		return amqp.Channel{}, amqp.Queue{}, err
+	}
+
+	err = ch.QueueBind(queueName, key, exchange, nowait, args)
+	if err != nil {
+		return amqp.Channel{}, amqp.Queue{}, err
+	}
+
+	return ch, q, nil
 }
+
+type SimpleQueType int
+
+const (
+	durable SimpleQueType = iota
+	transient
+)
