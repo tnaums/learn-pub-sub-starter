@@ -1,6 +1,12 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
+
+	amqp "github.com/rabbitmq/amqp091-go"	
+)
 
 func main() {
 	const rabbitConnString = "amqp://guest:guest@localhost:5672/"
@@ -12,4 +18,6 @@ func main() {
 	defer conn.Close()
 	
 	fmt.Println("Starting Peril client...")
+
+	userName, err := pubsub.ClientWelcome()	
 }
