@@ -108,5 +108,9 @@ func SubscribeJSON[T any](
 	// Get a new chan of amqp.Delivery structs using channel.Consume method
 	var args amqp.Table
 	ch, err := conn.Consume(queue, "", false, false, false, false, args)
+	if err != nil {
+		return err
+	}
+	
 	return nil
 }
