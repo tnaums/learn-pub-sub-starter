@@ -27,7 +27,19 @@ func main() {
 	userName, err := gamelogic.ClientWelcome()
 	queueName := routing.PauseKey + "." + userName
 	pubsub.DeclareAndBind(conn, routing.ExchangePerilDirect, queueName, routing.PauseKey, 1)
+	gameState := gamelogic.NewGameState(userName)
 
+	for {
+		words := gamelogic.GetInput()
+		if words[0] == "spawn" {
+			err := gameState.CommandSpawn(words)
+			if err != nil {
+				log.Fatalf("error calling spawn")
+			}
+		}
+	}
+
+	
 	// wait for ctrl+c
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)

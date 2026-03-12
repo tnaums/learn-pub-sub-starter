@@ -3,18 +3,20 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
+	//	"os"
+	//	"os/signal"
 
+	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
-	
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 func main() {
 	const rabbitConnString = "amqp://guest:guest@localhost:5672/"
-	//const rabbitConnString = "amqp://guest:guest@127.0.0.1:5672/"	
+
+	gamelogic.PrintServerHelp()
 
 	conn, err := amqp.Dial(rabbitConnString)
 	if err != nil {
@@ -28,10 +30,30 @@ func main() {
 		log.Fatalf("could not open channel: %v", err)
 	}
 
-	err = pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{true})
-	// wait for ctrl+c
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
-	<-signalChan
-	fmt.Println("RabbitMQ connection closed.")
+	for {
+		words := gamelogic.GetInput()
+		if len(words) == 0 {
+			continue
+		}
+		if words[0] == "pause" {
+			fmt.Println("sending pause message...")
+			err = pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{IsPaused: true})
+			if err != nil {
+				log.Fatalf("could not publish pause command")
+			}
+		} else if words[0] == "resume" {
+			fmt.Println("sending resume message...")
+			err = pubsub.PublishJSON(ch, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{IsPaused: false})
+			if err != nil {
+				log.Fatalf("could not publish resume command")
+			}
+		} else if words[0] == "quit" {
+			fmt.Println("exiting...")
+			break
+		} else {
+			fmt.Println("I don't understand that command.")
+		}
+
+	}
+
 }
