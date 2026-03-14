@@ -1,7 +1,9 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -28,6 +30,35 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	defer cancel()
 
 	err = ch.PublishWithContext(ctx, exchange, key, false, false, msg)
+	if err != nil {
+		// Since publish is asynchronous this can happen if the network connection
+		// is reset or if the server has run out of resources.
+		log.Fatalf("basic.publish: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
+	var dat bytes.Buffer
+	encoder := gob.NewEncoder(&dat)
+	if err := encoder.Encode(val); err != nil {
+		return err
+	}
+	//	return dat.Bytes(), nil
+
+	// Prepare this message to be persistent.  Your publishing requirements may
+	// be different.
+	msg := amqp.Publishing{
+		ContentType: "application/gob",
+		Body:        dat.Bytes(),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := ch.PublishWithContext(ctx, exchange, key, false, false, msg)
 	if err != nil {
 		// Since publish is asynchronous this can happen if the network connection
 		// is reset or if the server has run out of resources.
@@ -110,7 +141,7 @@ func SubscribeJSON[T any](
 	fmt.Printf("Queue %v declared and bound!\n", queue.Name)
 
 	// Get a new chan of amqp.Delivery structs using channel.Consume method
-
+	_ = ch.Qos(10, 0, true)
 	msgs, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return fmt.Errorf("could not consume messages: %v", err)
@@ -120,6 +151,73 @@ func SubscribeJSON[T any](
 		var target T
 		err := json.Unmarshal(data, &target)
 		return target, err
+	}
+
+	go func() {
+		defer ch.Close()
+		for msg := range msgs {
+			target, err := unmarshaller(msg.Body)
+			if err != nil {
+				fmt.Printf("could not unmarshal message: %v\n", err)
+				continue
+			}
+			switch handler(target) {
+			case Ack:
+				msg.Ack(false)
+				fmt.Println("Ack")
+			case NackDiscard:
+				msg.Nack(false, false)
+				fmt.Println("NackDiscard")
+			case NackRequeue:
+				msg.Nack(false, true)
+				fmt.Println("NackRequeue")
+			}
+		}
+	}()
+	return nil
+}
+
+func SubscribeGob[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
+	handler func(T) Acktype,
+) error {
+	// Call DeclareAndBind
+	ch, queue, err := DeclareAndBind(
+		conn,
+		exchange,
+		queueName,
+		key,
+		queueType,
+	)
+	if err != nil {
+		return fmt.Errorf("could not declare and bind queue: %v", err)
+	}
+
+	fmt.Printf("Queue %v declared and bound!\n", queue.Name)
+
+	// Get a new chan of amqp.Delivery structs using channel.Consume method
+
+	msgs, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
+	if err != nil {
+		return fmt.Errorf("could not consume messages: %v", err)
+	}
+
+	unmarshaller := func(data []byte) (T, error) {
+
+		buf := bytes.NewBuffer(data)
+		decoder := gob.NewDecoder(buf)
+
+		var target T
+		err := decoder.Decode(&target)
+		if err != nil {
+			return target, fmt.Errorf("could not decode gob: %v", err)
+		}
+
+		return target, nil
 	}
 
 	go func() {
