@@ -3,6 +3,7 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -48,7 +49,7 @@ func DeclareAndBind(
 	autodelete := false
 	exclusive := false
 	nowait := false
-	
+
 	ch, err := conn.Channel()
 	if err != nil {
 		return &amqp.Channel{}, amqp.Queue{}, err
@@ -63,7 +64,9 @@ func DeclareAndBind(
 		exclusive = true
 	}
 
-	var args amqp.Table
+	args := amqp.Table{
+		"x-dead-letter-exchange": "peril_dlx",
+	}
 	q, err := ch.QueueDeclare(queueName, durable, autodelete, exclusive, nowait, args)
 	if err != nil {
 		return &amqp.Channel{}, amqp.Queue{}, err
@@ -85,15 +88,15 @@ const (
 )
 
 func SubscribeJSON[T any](
-    conn *amqp.Connection,
-    exchange,
-    queueName,
-    key string,
-    queueType SimpleQueueType, // an enum to represent "durable" or "transient"
-    handler func(T),
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queueType SimpleQueueType, // an enum to represent "durable" or "transient"
+	handler func(T) Acktype,
 ) error {
 	// Call DeclareAndBind
-	_, queue, err := pubsub.DeclareAndBind(
+	ch, queue, err := DeclareAndBind(
 		conn,
 		exchange,
 		queueName,
@@ -101,12 +104,52 @@ func SubscribeJSON[T any](
 		queueType,
 	)
 	if err != nil {
-		log.Fatalf("could not subscribe to echange %s: %v", exchange, err)
+		return fmt.Errorf("could not declare and bind queue: %v", err)
 	}
+
 	fmt.Printf("Queue %v declared and bound!\n", queue.Name)
-	
+
 	// Get a new chan of amqp.Delivery structs using channel.Consume method
-	var args amqp.Table
-	ch, err := conn.Consume(queue, "", false, false, false, false, args)
+
+	msgs, err := ch.Consume(queue.Name, "", false, false, false, false, nil)
+	if err != nil {
+		return fmt.Errorf("could not consume messages: %v", err)
+	}
+
+	unmarshaller := func(data []byte) (T, error) {
+		var target T
+		err := json.Unmarshal(data, &target)
+		return target, err
+	}
+
+	go func() {
+		defer ch.Close()
+		for msg := range msgs {
+			target, err := unmarshaller(msg.Body)
+			if err != nil {
+				fmt.Printf("could not unmarshal message: %v\n", err)
+				continue
+			}
+			switch handler(target) {
+			case Ack:
+				msg.Ack(false)
+				fmt.Println("Ack")
+			case NackDiscard:
+				msg.Nack(false, false)
+				fmt.Println("NackDiscard")
+			case NackRequeue:
+				msg.Nack(false, true)
+				fmt.Println("NackRequeue")
+			}
+		}
+	}()
 	return nil
 }
+
+type Acktype int
+
+const (
+	Ack Acktype = iota
+	NackDiscard
+	NackRequeue
+)
